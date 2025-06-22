@@ -129,7 +129,7 @@ export default function RestaurantsPage() {
             >
               <Map className="h-4 w-4" />
               {showMap ? '목록 보기' : '지도 보기'}
-            </Button>
+          </Button>
           </div>
         </div>
 
@@ -239,7 +239,7 @@ export default function RestaurantsPage() {
           </div>
         ) : (
           /* List View */
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {loading ? (
               <div className="col-span-3 text-center py-8">
                 <p>데이터를 불러오는 중...</p>
@@ -254,34 +254,34 @@ export default function RestaurantsPage() {
 
                 return (
                   <Card key={store.id} className="hover:shadow-lg transition-shadow cursor-pointer">
-                    <CardHeader>
-                      <div className="flex justify-between items-start">
-                        <div>
+              <CardHeader>
+                <div className="flex justify-between items-start">
+                  <div>
                           <CardTitle className="text-lg">{store.store_name}</CardTitle>
-                          <CardDescription className="flex items-center mt-1">
-                            <MapPin className="h-4 w-4 mr-1" />
+                    <CardDescription className="flex items-center mt-1">
+                      <MapPin className="h-4 w-4 mr-1" />
                             {store.mapped_category}
-                          </CardDescription>
-                        </div>
+                    </CardDescription>
+                  </div>
                         {hasUserData && userRating && (
-                          <div className="flex items-center bg-orange-100 px-2 py-1 rounded-full">
-                            <Star className="h-4 w-4 text-orange-500 mr-1" />
+                  <div className="flex items-center bg-orange-100 px-2 py-1 rounded-full">
+                    <Star className="h-4 w-4 text-orange-500 mr-1" />
                             <span className="text-sm font-medium">{userRating}</span>
-                          </div>
+                  </div>
                         )}
-                      </div>
-                    </CardHeader>
-                    
-                    <CardContent>
-                      <div className="space-y-3">
-                        <div className="flex items-center text-sm text-gray-600">
-                          <MapPin className="h-4 w-4 mr-2" />
+                </div>
+              </CardHeader>
+              
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex items-center text-sm text-gray-600">
+                    <MapPin className="h-4 w-4 mr-2" />
                           <span className="truncate">{store.road_address}</span>
-                        </div>
-                        
+                  </div>
+                  
                         {priceRange && (
-                          <div className="flex items-center text-sm text-gray-600">
-                            <DollarSign className="h-4 w-4 mr-2" />
+                  <div className="flex items-center text-sm text-gray-600">
+                    <DollarSign className="h-4 w-4 mr-2" />
                             <span>{priceRange}</span>
                           </div>
                         )}
@@ -313,12 +313,12 @@ export default function RestaurantsPage() {
                                     document.body.appendChild(modal);
                                   }}
                                 />
-                              </div>
+                  </div>
                             )}
-                            
+                  
                             {/* 등록된 메뉴 */}
                             {store.restaurants![0].menu_items && store.restaurants![0].menu_items.length > 0 && (
-                              <div className="bg-gray-50 p-3 rounded-lg">
+                  <div className="bg-gray-50 p-3 rounded-lg">
                                 <p className="text-sm font-medium text-gray-900 mb-2">등록된 메뉴</p>
                                 <div className="space-y-1">
                                   {store.restaurants![0].menu_items.slice(0, 3).map((menu, idx) => (
@@ -340,17 +340,17 @@ export default function RestaurantsPage() {
                                 </div>
                               </div>
                             )}
-                          </div>
+                  </div>
                         )}
-                        
-                        <div className="flex justify-between items-center text-xs text-gray-500">
+                  
+                  <div className="flex justify-between items-center text-xs text-gray-500">
                           <span className="text-sm">
                             {hasUserData ? (
                               <span className="text-green-600 font-medium">정보 등록됨</span>
                             ) : (
                               <span className="text-gray-500">정보 등록 필요</span>
                             )}
-                          </span>
+                    </span>
                           {reviewCount > 0 && (
                             <span>리뷰 {reviewCount}개</span>
                           )}
@@ -380,14 +380,14 @@ export default function RestaurantsPage() {
                               </Button>
                             }
                           />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
                 );
               })
             )}
-          </div>
+        </div>
         )}
 
         {/* Empty State */}
