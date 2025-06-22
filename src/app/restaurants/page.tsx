@@ -263,7 +263,7 @@ export default function RestaurantsPage() {
                             {store.mapped_category}
                     </CardDescription>
                   </div>
-                        {hasUserData && userRating && (
+                        {hasUserData && userRating && userRating > 0 && (
                   <div className="flex items-center bg-orange-100 px-2 py-1 rounded-full">
                     <Star className="h-4 w-4 text-orange-500 mr-1" />
                             <span className="text-sm font-medium">{userRating}</span>
@@ -376,7 +376,7 @@ export default function RestaurantsPage() {
                             trigger={
                               <Button size="sm" className="bg-orange-500 hover:bg-orange-600 flex-1">
                                 <Plus className="h-4 w-4 mr-1" />
-                                {hasUserData ? '정보 수정' : '메뉴/가격 등록'}
+                                {hasUserData && store.restaurants![0].menu_items?.length > 0 ? '메뉴 추가/수정' : '메뉴/가격 등록'}
                               </Button>
                             }
                           />
