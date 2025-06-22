@@ -124,7 +124,7 @@ export function getMockStores(options?: {
               id: parseInt(storedData.id.replace('restaurant_', '')),
               rating: storedData.rating || 0,
               price_range: storedData.price_range,
-              menu_items: storedData.menu_items.map((item: any) => ({
+              menu_items: storedData.menu_items.map((item) => ({
                 name: item.name,
                 price: item.price,
                 is_popular: item.is_popular

@@ -17,7 +17,7 @@ interface StoredRestaurant {
   rating: number;
   price_range: string;
   menu_items: StoredMenuItem[];
-  reviews: any[];
+  reviews: { rating: number }[];
   menu_board_image_url?: string;
   created_at: string;
 }

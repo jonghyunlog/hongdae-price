@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, X, Camera } from "lucide-react";
 
@@ -27,7 +27,7 @@ interface MenuRegistrationModalProps {
 
 export default function MenuRegistrationModal({
   storeName,
-  storeId,
+  // storeId,
   existingMenus = [],
   onSubmit,
   trigger
@@ -51,7 +51,7 @@ export default function MenuRegistrationModal({
     }
   };
 
-  const updateMenu = (index: number, field: keyof MenuItem, value: any) => {
+  const updateMenu = (index: number, field: keyof MenuItem, value: string | number | boolean | File | undefined) => {
     const updated = [...menus];
     updated[index] = { ...updated[index], [field]: value };
     setMenus(updated);
@@ -264,7 +264,7 @@ export default function MenuRegistrationModal({
               <ul className="text-sm text-gray-600 space-y-1">
                 <li>• 정확한 가격 정보를 입력해주세요 (최근 방문 기준)</li>
                 <li>• 세트 메뉴의 경우 포함 사항을 설명에 적어주세요</li>
-                <li>• 대표 메뉴는 "인기 메뉴"로 체크해주세요</li>
+                <li>• 대표 메뉴는 &quot;인기 메뉴&quot;로 체크해주세요</li>
                 <li>• 사진이 있으면 다른 사용자들에게 더 도움이 됩니다</li>
               </ul>
             </CardContent>

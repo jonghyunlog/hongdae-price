@@ -5,12 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, MapPin, Clock, Star, DollarSign, Map, Plus } from "lucide-react";
+import { Search, MapPin, Star, DollarSign, Map, Plus } from "lucide-react";
 import Link from "next/link";
 // import { getPublicStores } from "@/lib/database"; // 환경변수 설정 후 사용
 import { getMockStores, type MockStore } from "@/lib/mockData";
 import { addMenusToStore } from "@/lib/localStorage";
-import KakaoMap from "@/components/KakaoMap";
+// import KakaoMap from "@/components/KakaoMap";
 import MenuRegistrationModal from "@/components/MenuRegistrationModal";
 
 type PublicStore = MockStore;
@@ -249,7 +249,7 @@ export default function RestaurantsPage() {
                 const hasUserData = store.restaurants && store.restaurants.length > 0;
                 const userRating = hasUserData ? store.restaurants![0].rating : null;
                 const priceRange = hasUserData ? store.restaurants![0].price_range : null;
-                const popularMenu = hasUserData ? store.restaurants![0].menu_items?.find(m => m.is_popular)?.name : null;
+                // const popularMenu = hasUserData ? store.restaurants![0].menu_items?.find(m => m.is_popular)?.name : null;
                 const reviewCount = hasUserData ? store.restaurants![0].reviews?.length || 0 : 0;
 
                 return (
