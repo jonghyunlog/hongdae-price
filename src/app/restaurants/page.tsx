@@ -9,7 +9,7 @@ import { Search, MapPin, Star, DollarSign, Map, Plus } from "lucide-react";
 import Link from "next/link";
 // import { getPublicStores } from "@/lib/database"; // 환경변수 설정 후 사용
 import { getMockStores, type MockStore } from "@/lib/mockData";
-import { addMenusToStore } from "@/lib/localStorage";
+import { addMenusToStore, fixRatingData } from "@/lib/localStorage";
 // import KakaoMap from "@/components/KakaoMap";
 import MenuRegistrationModal from "@/components/MenuRegistrationModal";
 
@@ -42,6 +42,8 @@ export default function RestaurantsPage() {
   };
 
   useEffect(() => {
+    // 기존 데이터의 rating 0을 null로 변경 (한번만 실행)
+    fixRatingData();
     fetchStores();
   }, []);
 
@@ -263,7 +265,7 @@ export default function RestaurantsPage() {
                             {store.mapped_category}
                     </CardDescription>
                   </div>
-                        {hasUserData && userRating && userRating > 0 && (
+                        {hasUserData && userRating !== null && userRating !== undefined && userRating > 0 && (
                   <div className="flex items-center bg-orange-100 px-2 py-1 rounded-full">
                     <Star className="h-4 w-4 text-orange-500 mr-1" />
                             <span className="text-sm font-medium">{userRating}</span>

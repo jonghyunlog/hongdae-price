@@ -14,7 +14,7 @@ interface StoredMenuItem {
 interface StoredRestaurant {
   id: string;
   public_store_id: number;
-  rating: number;
+  rating: number | null;
   price_range: string;
   menu_items: StoredMenuItem[];
   reviews: { rating: number }[];
@@ -97,7 +97,7 @@ export function addMenusToStore(storeId: number, menus: {
     restaurant = {
       id: `restaurant_${Date.now()}`,
       public_store_id: storeId,
-      rating: 0,
+      rating: null, // 평점 없음으로 초기화
       price_range: `${minPrice.toLocaleString()}-${maxPrice.toLocaleString()}원`,
       menu_items: newMenuItems,
       reviews: [],
@@ -127,4 +127,17 @@ export function getRestaurantForStore(storeId: number): StoredRestaurant | null 
 export function clearStoredData(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(STORAGE_KEY);
+}
+
+// 기존 데이터의 rating 0을 null로 변경 (마이그레이션)
+export function fixRatingData(): void {
+  if (typeof window === 'undefined') return;
+  
+  const stored = getStoredRestaurants();
+  const updated = stored.map(restaurant => ({
+    ...restaurant,
+    rating: restaurant.rating === 0 ? null : restaurant.rating
+  }));
+  
+  saveStoredRestaurants(updated);
 } 
