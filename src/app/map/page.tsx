@@ -22,8 +22,30 @@ export default function MapPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [category, setCategory] = useState("all");
   const [selectedStore, setSelectedStore] = useState<DisplayStore | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true); // PC: 기본 열림, 모바일: useEffect로 조정
   const [isScriptLoaded, setIsScriptLoaded] = useState(false);
+
+  // 반응형 사이드바 초기 상태 설정
+  useEffect(() => {
+    const handleResize = () => {
+      if (typeof window !== 'undefined') {
+        // 768px 미만 (모바일)에서는 사이드바 닫기
+        if (window.innerWidth < 768) {
+          setIsSidebarOpen(false);
+        } else {
+          // PC에서는 사이드바 열기
+          setIsSidebarOpen(true);
+        }
+      }
+    };
+
+    // 초기 설정
+    handleResize();
+
+    // 리사이즈 이벤트 리스너
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // 페이지 로드 시 스크립트가 이미 로드되어 있는지 확인
   useEffect(() => {
@@ -122,12 +144,10 @@ export default function MapPage() {
       );
       if (store) {
         setSelectedStore(store);
-        if (!isSidebarOpen) {
-          setIsSidebarOpen(true);
-        }
+        // 모바일에서는 사이드바를 자동으로 열지 않음 (지도 카드로 충분)
       }
     },
-    [stores, isSidebarOpen]
+    [stores]
   );
   
   const categories = useMemo(() => {
@@ -143,6 +163,14 @@ export default function MapPage() {
         onLoad={() => setIsScriptLoaded(true)}
       />
       <div className="relative h-screen flex flex-col md:flex-row">
+        {/* 모바일 오버레이 */}
+        {isSidebarOpen && (
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 z-10 md:hidden"
+            onClick={() => setIsSidebarOpen(false)}
+          />
+        )}
+        
         {/* Sidebar */}
         <div
           className={`absolute md:relative top-0 left-0 h-full z-20 transform transition-transform duration-300 ease-in-out ${
@@ -244,13 +272,22 @@ export default function MapPage() {
 
         {/* Map Area */}
         <div className="flex-1 h-full relative">
+          {/* 목록 열기 버튼 (모바일만) */}
           {!isSidebarOpen && (
             <button
               onClick={() => setIsSidebarOpen(true)}
-              className="absolute top-4 left-4 z-10 bg-white p-2 rounded-full shadow-md md:hidden"
+              className="absolute top-4 left-4 z-10 bg-white p-3 rounded-full shadow-lg hover:shadow-xl transition-all md:hidden"
             >
-              <List className="h-6 w-6" />
+              <List className="h-5 w-5" />
             </button>
+          )}
+          
+          {/* 지도 영역 클릭 시 사이드바 닫기 (모바일만) */}
+          {isSidebarOpen && (
+            <div 
+              className="absolute inset-0 z-5 md:hidden"
+              onClick={() => setIsSidebarOpen(false)}
+            />
           )}
 
           {isScriptLoaded ? (
@@ -347,15 +384,23 @@ export default function MapPage() {
                 </div>
               )}
               
-              <div className="mt-4 text-center">
-                <Link href={`/restaurants?store=${selectedStore.id}`} legacyBehavior>
-                  <a className="text-orange-500 hover:underline font-semibold">
-                    {selectedStore.restaurants && selectedStore.restaurants.length > 0 
-                      ? '메뉴 추가/수정하기' 
-                      : '메뉴 등록하기'
-                    }
-                  </a>
-                </Link>
+              <div className="mt-4 space-y-2">
+                <button
+                  onClick={() => setIsSidebarOpen(true)}
+                  className="w-full py-2 px-4 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
+                >
+                  목록에서 보기
+                </button>
+                <div className="text-center">
+                  <Link href={`/restaurants?store=${selectedStore.id}`} legacyBehavior>
+                    <a className="text-orange-500 hover:underline font-semibold text-sm">
+                      {selectedStore.restaurants && selectedStore.restaurants.length > 0 
+                        ? '메뉴 추가/수정하기' 
+                        : '메뉴 등록하기'
+                      }
+                    </a>
+                  </Link>
+                </div>
               </div>
             </div>
           )}
