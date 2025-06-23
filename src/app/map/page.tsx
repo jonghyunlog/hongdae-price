@@ -1,333 +1,364 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, MapPin, Star, DollarSign, List, Navigation } from "lucide-react";
+import { Search, MapPin, Star, DollarSign, List, Navigation, X } from "lucide-react";
 import Link from "next/link";
-import { getMockStores, MockStore } from '@/lib/mockData';
-import KakaoMap from '@/components/KakaoMap';
+import { getPublicStores, getRestaurants, type PublicStore } from '@/lib/database';
+// import { getMockStores } from '@/lib/mockData'; // 임시 데이터 사용 중단
+import KakaoMap, { type MapMarker } from '@/components/KakaoMap';
 import Script from 'next/script';
 
 export default function MapPage() {
-  const [stores, setStores] = useState<MockStore[]>([]);
-  const [loading, setLoading] = useState(true);
+  interface DisplayStore extends PublicStore {
+    restaurants?: any[]; // DB에서 가져온 restaurant 데이터
+  }
+  
+  const [stores, setStores] = useState<DisplayStore[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [category, setCategory] = useState("all");
-  const [selectedStore, setSelectedStore] = useState<MockStore | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [selectedStore, setSelectedStore] = useState<DisplayStore | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isScriptLoaded, setIsScriptLoaded] = useState(false);
+
+  // 페이지 로드 시 스크립트가 이미 로드되어 있는지 확인
+  useEffect(() => {
+    const checkScript = () => {
+      if (typeof window !== 'undefined' && window.kakao && window.kakao.maps) {
+        setIsScriptLoaded(true);
+        return true;
+      }
+      return false;
+    };
+
+    // 즉시 확인
+    if (checkScript()) return;
+
+    // 스크립트가 없으면 주기적으로 확인 (최대 3초)
+    const interval = setInterval(() => {
+      if (checkScript()) {
+        clearInterval(interval);
+      }
+    }, 100);
+
+    const timeout = setTimeout(() => {
+      clearInterval(interval);
+    }, 3000);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, []);
+  const [showMore, setShowMore] = useState(false);
 
   // 환경변수 값 콘솔 출력 (진단용)
   // console.log('KAKAO KEY:', process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY);
 
-  const fetchStores = async () => {
-    setLoading(true);
+  const fetchStores = useCallback(async () => {
+    setIsLoading(true);
     try {
-      const data = await getMockStores({
-        search: searchTerm,
+      // 검색어가 있으면 검색 결과, 없으면 인기 맛집 소수만
+      let limit = 10; // 기본 10개
+      if (searchTerm) {
+        limit = 50; // 검색시 50개
+      } else if (showMore) {
+        limit = 100; // 더보기 클릭시 100개
+      }
+      
+      const publicStores = await getPublicStores({ 
+        search: searchTerm || undefined,
         category: category === 'all' ? undefined : category,
-        limit: 100
+        limit: limit 
       });
-      setStores(data);
+
+      // DB에서 사용자가 등록한 음식점 데이터 가져오기
+      const dbRestaurants = await getRestaurants({ limit: 1000 });
+
+      const combinedStores: DisplayStore[] = publicStores.map((store) => {
+        const matchingRestaurants = dbRestaurants.filter(
+          (r: any) => r.public_store_id === store.id
+        );
+        return {
+          ...store,
+          restaurants: matchingRestaurants,
+        };
+      });
+
+      setStores(combinedStores);
     } catch (error) {
-      console.error('Error fetching stores:', error);
+      console.error('Failed to fetch stores', error);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
-  };
+  }, [searchTerm, category, showMore]);
 
   useEffect(() => {
     fetchStores();
-  }, []);
+  }, [fetchStores]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchStores();
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [searchTerm, category]);
+  const filteredStores = useMemo(() => {
+    // 서버에서 이미 필터링되어 오므로 그대로 사용
+    return stores;
+  }, [stores]);
 
-  const filteredStores = useMemo(() => stores.filter(store => {
-    const matchesSearch = store.store_name?.toLowerCase().includes(searchTerm.toLowerCase()) || false;
-    const matchesCategory = category === "all" || store.mapped_category === category;
-    return matchesSearch && matchesCategory;
-  }), [stores, searchTerm, category]);
-
-  // 카카오 지도용 마커 데이터 변환
-  const mapMarkers = useMemo(() => filteredStores.map(store => {
-    const hasUserData = store.restaurants && store.restaurants.length > 0;
-    const priceRange = hasUserData ? store.restaurants![0].price_range : null;
-    const menuCount = hasUserData ? store.restaurants![0].menu_items?.length || 0 : 0;
-    
-    return {
+  const mapMarkers: MapMarker[] = useMemo(() => {
+    return filteredStores.map((store) => ({
       lat: store.latitude,
       lng: store.longitude,
-      title: store.store_name,
-      content: `
-        <div style="padding: 8px; min-width: 200px;">
-          <div style="font-weight: bold; margin-bottom: 4px;">${store.store_name}</div>
-          <div style="font-size: 12px; color: #666; margin-bottom: 4px;">${store.mapped_category}</div>
-          ${priceRange ? `<div style="font-size: 12px; color: #28a745;">💰 ${priceRange}</div>` : ''}
-          ${menuCount > 0 ? `<div style="font-size: 12px; color: #007bff;">📋 메뉴 ${menuCount}개</div>` : ''}
-          <div style="font-size: 11px; color: #999; margin-top: 4px;">${store.road_address}</div>
-        </div>
-      `
-    };
-  }), [filteredStores]);
+      label: store.store_name,
+      category: store.mapped_category || '기타',
+    }));
+  }, [filteredStores]);
 
-  const handleMarkerClick = useCallback((marker: any) => {
-    const store = filteredStores.find(s => 
-      s.latitude === marker.lat && s.longitude === marker.lng
-    );
-    if (store) {
-      setSelectedStore(store);
-      if (!isSidebarOpen) {
-        setIsSidebarOpen(true);
+  const handleMarkerClick = useCallback(
+    (markerData: MapMarker) => {
+      const store = stores.find(
+        (s) => s.latitude === markerData.lat && s.longitude === markerData.lng
+      );
+      if (store) {
+        setSelectedStore(store);
+        if (!isSidebarOpen) {
+          setIsSidebarOpen(true);
+        }
       }
-    }
-  }, [filteredStores, isSidebarOpen]);
-
-  // 홍대 중심 좌표
-  const hongdaeCenter = { lat: 37.5563, lng: 126.9236 };
+    },
+    [stores, isSidebarOpen]
+  );
+  
+  const categories = useMemo(() => {
+    const categorySet = new Set(stores.map(s => s.mapped_category).filter(Boolean) as string[]);
+    return ['all', ...Array.from(categorySet).sort()];
+  }, [stores]);
 
   return (
     <>
       <Script
-        src={`//dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY}&autoload=false`}
+        src={`//dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY}&libraries=services,clusterer&autoload=false`}
         strategy="afterInteractive"
+        onLoad={() => setIsScriptLoaded(true)}
       />
-      <div className="min-h-screen bg-gray-50">
-        {/* Header */}
-        <header className="border-b bg-white sticky top-0 z-50">
-          <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-            <Link href="/" className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">홍</span>
-              </div>
-              <h1 className="text-xl font-bold text-gray-900">홍대 맛집지도</h1>
-            </Link>
-            <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="md:hidden"
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              >
-                <List className="h-4 w-4 mr-1" />
-                목록
-              </Button>
-              <Link href="/restaurants" className="hidden md:flex">
-                <Button variant="outline" size="sm">
-                  <List className="h-4 w-4 mr-1" />
-                  전체 목록보기
-                </Button>
-              </Link>
-              <Button variant="outline" size="sm">로그인</Button>
-            </div>
+      <div className="relative h-screen flex flex-col md:flex-row">
+        {/* Sidebar */}
+        <div
+          className={`absolute md:relative top-0 left-0 h-full z-20 transform transition-transform duration-300 ease-in-out ${
+            isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          } w-full md:w-96 bg-white shadow-lg flex flex-col`}
+        >
+          <div className="p-4 border-b flex justify-between items-center">
+            <h2 className="text-xl font-bold">가게 목록</h2>
+            <button
+              onClick={() => setIsSidebarOpen(false)}
+              className="md:hidden p-2"
+            >
+              <X className="h-6 w-6" />
+            </button>
           </div>
-        </header>
 
-        <div className="flex h-[calc(100vh-73px)] relative">
-          {/* 좌측 검색 패널 */}
-          <div className={`
-            absolute top-0 left-0 h-full w-80 bg-white border-r flex flex-col z-20 
-            transition-transform duration-300 ease-in-out
-            ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-            md:relative md:translate-x-0 md:flex
-          `}>
-            {/* 검색 영역 */}
-            <div className="p-4 border-b">
-              <div className="space-y-3">
-                <div className="relative">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                  <Input
-                    placeholder="음식점 이름을 검색하세요..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-                
-                <Select value={category} onValueChange={setCategory}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="카테고리 선택" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">전체</SelectItem>
-                    <SelectItem value="음식">음식</SelectItem>
-                    <SelectItem value="카페">카페</SelectItem>
-                    <SelectItem value="주점">주점</SelectItem>
-                    <SelectItem value="패스트푸드">패스트푸드</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+          <div className="p-4">
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="가게 이름 또는 주소 검색..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border rounded-lg"
+              />
             </div>
+            <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full p-2 border rounded-lg mb-4 bg-white"
+              >
+                {categories.map(c => (
+                  <option key={c} value={c}>{c === 'all' ? '모든 카테고리' : c}</option>
+                ))}
+            </select>
+          </div>
 
-            {/* 결과 목록 */}
-            <div className="flex-1 overflow-y-auto">
-              <div className="p-4">
-                <p className="text-sm text-gray-600 mb-4">
-                  총 {filteredStores.length}개 맛집
-                </p>
+          <div className="flex-grow overflow-y-auto">
+            {isLoading ? (
+              <div className="text-center py-8">
+                <p className="text-sm text-gray-500">가게 목록을 불러오는 중...</p>
+              </div>
+            ) : (
+              <>
+                <ul>
+                  {filteredStores.map((store) => (
+                    <li
+                      key={store.id}
+                      className={`p-4 cursor-pointer hover:bg-gray-100 ${
+                        selectedStore?.id === store.id ? 'bg-orange-100' : ''
+                      }`}
+                      onClick={() => setSelectedStore(store)}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h3 className="font-semibold">{store.store_name}</h3>
+                          <p className="text-sm text-gray-600">
+                            {store.mapped_category}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {store.road_address}
+                          </p>
+                        </div>
+                        {store.restaurants && store.restaurants.length > 0 && (
+                          <div className="flex items-center bg-orange-100 px-2 py-1 rounded-full ml-2">
+                            <Star className="h-3 w-3 text-orange-500 mr-1" />
+                            <span className="text-xs font-medium text-orange-700">메뉴등록</span>
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
                 
-                {loading ? (
-                  <div className="text-center py-8">
-                    <p className="text-sm text-gray-500">검색 중...</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {filteredStores.map((store) => {
-                      const hasUserData = store.restaurants && store.restaurants.length > 0;
-                      const userRating = hasUserData ? store.restaurants![0].rating : null;
-                      const priceRange = hasUserData ? store.restaurants![0].price_range : null;
-                      
-                      return (
-                        <Card 
-                          key={store.id} 
-                          className={`cursor-pointer transition-all hover:shadow-md ${
-                            selectedStore?.id === store.id ? 'ring-2 ring-orange-500' : ''
-                          }`}
-                          onClick={() => setSelectedStore(store)}
-                        >
-                          <CardHeader className="pb-2">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <CardTitle className="text-base">{store.store_name}</CardTitle>
-                                <CardDescription className="text-xs">
-                                  {store.mapped_category}
-                                </CardDescription>
-                              </div>
-                              {hasUserData && userRating && userRating > 0 && (
-                                <div className="flex items-center bg-orange-100 px-2 py-1 rounded-full">
-                                  <Star className="h-3 w-3 text-orange-500 mr-1" />
-                                  <span className="text-xs font-medium">{userRating}</span>
-                                </div>
-                              )}
-                            </div>
-                          </CardHeader>
-                          
-                          <CardContent className="pt-0">
-                            <div className="space-y-2">
-                              <div className="flex items-center text-xs text-gray-600">
-                                <MapPin className="h-3 w-3 mr-1" />
-                                <span className="truncate">{store.road_address}</span>
-                              </div>
-                              
-                              {priceRange && (
-                                <div className="flex items-center text-xs text-gray-600">
-                                  <DollarSign className="h-3 w-3 mr-1" />
-                                  <span>{priceRange}</span>
-                                </div>
-                              )}
-                              
-                              <div className="flex justify-between items-center">
-                                <span className="text-xs">
-                                  {hasUserData ? (
-                                    <span className="text-green-600 font-medium">가격정보 있음</span>
-                                  ) : (
-                                    <span className="text-gray-500">가격정보 없음</span>
-                                  )}
-                                </span>
-                                {hasUserData && store.restaurants![0].menu_board_image_url && (
-                                  <span className="text-xs text-blue-600">메뉴판 있음</span>
-                                )}
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
+                {/* 더 보기 버튼 */}
+                {!searchTerm && !showMore && (
+                  <div className="p-4 text-center border-t">
+                    <button
+                      onClick={() => setShowMore(true)}
+                      className="w-full py-2 px-4 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+                    >
+                      더 많은 맛집 보기 ({filteredStores.length}/100+)
+                    </button>
                   </div>
                 )}
-              </div>
-            </div>
-          </div>
-
-          {/* 우측 지도 영역 */}
-          <div className="flex-1 relative">
-            <KakaoMap
-              width="100%"
-              height="100%"
-              latitude={hongdaeCenter.lat}
-              longitude={hongdaeCenter.lng}
-              markers={mapMarkers}
-              zoom={4}
-              onMarkerClick={handleMarkerClick}
-            />
-
-            {/* 선택된 가게 정보 카드 */}
-            {selectedStore && (
-              <div className="absolute bottom-4 left-4 right-4 bg-white rounded-lg shadow-lg p-4">
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <h3 className="text-lg font-bold">{selectedStore.store_name}</h3>
-                    <p className="text-sm text-gray-600">{selectedStore.mapped_category}</p>
-                  </div>
-                  <Button
-                    size="sm"
-                    onClick={() => setSelectedStore(null)}
-                    variant="ghost"
-                    className="text-gray-500"
-                  >
-                    ✕
-                  </Button>
-                </div>
                 
-                <div className="space-y-2 mb-4">
-                  <div className="flex items-center text-sm text-gray-600">
-                    <MapPin className="h-4 w-4 mr-2" />
-                    <span>{selectedStore.road_address}</span>
+                {showMore && (
+                  <div className="p-4 text-center border-t">
+                    <p className="text-sm text-gray-500">
+                      총 {filteredStores.length}개 맛집 표시 중
+                    </p>
                   </div>
-                  
-                  {selectedStore.restaurants && selectedStore.restaurants.length > 0 && (
-                    <>
-                      {selectedStore.restaurants[0].price_range && (
-                        <div className="flex items-center text-sm text-gray-600">
-                          <DollarSign className="h-4 w-4 mr-2" />
-                          <span>{selectedStore.restaurants[0].price_range}</span>
-                        </div>
-                      )}
-                      
-                      {selectedStore.restaurants[0].menu_board_image_url && (
-                        <div className="mb-3">
-                          <h4 className="text-sm font-semibold mb-2">메뉴판</h4>
-                          <img 
-                            src={selectedStore.restaurants[0].menu_board_image_url}
-                            alt="메뉴판" 
-                            className="w-full h-32 object-cover rounded cursor-pointer"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                              console.warn('메뉴판 이미지 로드 실패');
-                            }}
-                            onClick={() => {
-                              const modal = document.createElement('div');
-                              modal.className = 'fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50';
-                              modal.innerHTML = `<img src="${selectedStore.restaurants![0].menu_board_image_url}" alt="메뉴판 확대" class="max-w-full max-h-full object-contain rounded-lg">`;
-                              modal.onclick = () => modal.remove();
-                              document.body.appendChild(modal);
-                            }}
-                          />
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-                
-                <div className="flex gap-2">
-                  <Link href={`/restaurants?store=${selectedStore.id}`} className="flex-1">
-                    <Button size="sm" className="w-full bg-orange-500 hover:bg-orange-600">
-                      상세정보
-                    </Button>
-                  </Link>
-                  <Button size="sm" variant="outline">
-                    길찾기
-                  </Button>
-                </div>
-              </div>
+                )}
+              </>
             )}
           </div>
+        </div>
+
+        {/* Map Area */}
+        <div className="flex-1 h-full relative">
+          {!isSidebarOpen && (
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className="absolute top-4 left-4 z-10 bg-white p-2 rounded-full shadow-md md:hidden"
+            >
+              <List className="h-6 w-6" />
+            </button>
+          )}
+
+          {isScriptLoaded ? (
+            <KakaoMap
+              latitude={37.5559}
+              longitude={126.9238}
+              markers={mapMarkers}
+              onMarkerClick={handleMarkerClick}
+              zoom={5}
+            />
+          ) : (
+            <div className="w-full h-full bg-gray-100 flex items-center justify-center rounded-lg">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto mb-2"></div>
+                <p className="text-sm text-gray-600">지도 API 로딩 중...</p>
+              </div>
+            </div>
+          )}
+          
+          {selectedStore && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-md bg-white p-4 rounded-lg shadow-lg z-10 max-h-[60vh] overflow-y-auto">
+               <button 
+                onClick={() => setSelectedStore(null)} 
+                className="absolute top-2 right-2 text-gray-500 hover:text-gray-800"
+              >
+                <X size={20} />
+              </button>
+              <h3 className="text-lg font-bold mb-2">{selectedStore.store_name}</h3>
+              <p className="text-gray-600">{selectedStore.mapped_category}</p>
+              <div className="flex items-center text-sm text-gray-500 mt-2">
+                <MapPin className="h-4 w-4 mr-2" />
+                <span className="truncate">{selectedStore.road_address}</span>
+              </div>
+              
+              {/* 메뉴 정보 표시 */}
+              {selectedStore.restaurants && selectedStore.restaurants.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  {/* 등록된 메뉴 목록 */}
+                  {selectedStore.restaurants[0].menu_items && selectedStore.restaurants[0].menu_items.length > 0 && (
+                    <div className="bg-green-50 p-3 rounded-lg">
+                      <div className="flex items-center mb-2">
+                        <Star className="h-4 w-4 text-green-600 mr-1" />
+                        <span className="text-sm font-medium text-green-800">
+                          등록된 메뉴 ({selectedStore.restaurants[0].menu_items.length}개)
+                        </span>
+                      </div>
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {selectedStore.restaurants[0].menu_items.map((item: any, idx: number) => (
+                          <div key={idx} className="flex justify-between items-center text-sm">
+                            <span className="text-gray-700">
+                              {item.name}
+                              {item.is_popular && <span className="text-orange-500 ml-1">★</span>}
+                            </span>
+                            <span className="font-medium text-gray-900">
+                              {item.price.toLocaleString()}원
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* 메뉴판 이미지 */}
+                  {selectedStore.restaurants[0].menu_board_image_url && (
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <p className="text-sm font-medium text-gray-900 mb-2">메뉴판</p>
+                      <img
+                        src={selectedStore.restaurants[0].menu_board_image_url}
+                        alt="메뉴판"
+                        className="w-full h-24 object-cover rounded-md cursor-pointer hover:opacity-90 transition-opacity"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const modal = document.createElement('div');
+                          modal.className = 'fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4';
+                          modal.innerHTML = `
+                            <div class="relative max-w-4xl max-h-full">
+                              <img src="${selectedStore.restaurants![0].menu_board_image_url}" alt="메뉴판 확대" class="max-w-full max-h-full object-contain rounded-lg">
+                              <button class="absolute top-4 right-4 text-white bg-black bg-opacity-50 rounded-full p-2 hover:bg-opacity-75">✕</button>
+                            </div>
+                          `;
+                          modal.onclick = (ev) => {
+                            if (ev.target === modal || (ev.target as HTMLElement).tagName === 'BUTTON') {
+                              document.body.removeChild(modal);
+                            }
+                          };
+                          document.body.appendChild(modal);
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              <div className="mt-4 text-center">
+                <Link href={`/restaurants?store=${selectedStore.id}`} legacyBehavior>
+                  <a className="text-orange-500 hover:underline font-semibold">
+                    {selectedStore.restaurants && selectedStore.restaurants.length > 0 
+                      ? '메뉴 추가/수정하기' 
+                      : '메뉴 등록하기'
+                    }
+                  </a>
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </>

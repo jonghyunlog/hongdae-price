@@ -1,5 +1,7 @@
 // 로컬 스토리지를 사용한 임시 데이터 저장
 
+import { v4 as uuidv4 } from 'uuid';
+
 interface StoredMenuItem {
   id: string;
   storeId: number;
@@ -11,8 +13,8 @@ interface StoredMenuItem {
   created_at: string;
 }
 
-interface StoredRestaurant {
-  id: string;
+export interface StoredRestaurant {
+  id: number;
   public_store_id: number;
   rating: number | null;
   price_range: string;
@@ -25,93 +27,77 @@ interface StoredRestaurant {
 const STORAGE_KEY = 'hongdae-restaurants';
 
 // 저장된 음식점 데이터 불러오기
-export const getStoredRestaurants = (): StoredRestaurant[] => {
+export function getStoredRestaurants(): StoredRestaurant[] {
   if (typeof window === 'undefined') return [];
-  
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) return [];
-    
-    const data = JSON.parse(stored);
-    // blob URL 필터링 제거 - 새로 등록한 이미지도 보이도록 함
-    return data;
-  } catch (error) {
-    console.error('Failed to load stored restaurants:', error);
-    return [];
-  }
-};
+  const data = localStorage.getItem(STORAGE_KEY);
+  return data ? JSON.parse(data) : [];
+}
 
 // 음식점 데이터 저장하기
 export function saveStoredRestaurants(restaurants: StoredRestaurant[]): void {
   if (typeof window === 'undefined') return;
-  
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(restaurants));
-  } catch (error) {
-    console.error('Error saving restaurants:', error);
-  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(restaurants));
 }
 
-// 새 메뉴 등록
-export function addMenusToStore(storeId: number, menus: {
-  name: string;
-  price: number;
-  description: string;
-  is_popular: boolean;
-  image?: File;
-}[], menuBoardImage?: File): void {
-  const stored = getStoredRestaurants();
-  let restaurant = stored.find(r => r.public_store_id === storeId);
-
-  // 새 메뉴 아이템들 생성
-  const newMenuItems: StoredMenuItem[] = menus.map(menu => ({
-    id: `menu_${Date.now()}_${Math.random()}`,
-    storeId: storeId,
-    name: menu.name,
-    price: menu.price,
-    description: menu.description,
-    is_popular: menu.is_popular,
-    image_url: menu.image ? URL.createObjectURL(menu.image) : undefined,
-    created_at: new Date().toISOString()
-  }));
-
-  // 메뉴판 이미지 처리
-  const menuBoardImageUrl = menuBoardImage ? URL.createObjectURL(menuBoardImage) : undefined;
-
-  if (restaurant) {
-    // 기존 음식점에 메뉴 추가
-    restaurant.menu_items.push(...newMenuItems);
+// 새 메뉴 등록 (Supabase만 사용)
+export async function addMenusToStore(
+  storeId: number,
+  menuItems: Omit<MenuItem, 'id' | 'store_id'>[],
+  menuBoardImage?: File
+) {
+  const { createRestaurant, createMenuItem, getPublicStores } = await import('./database');
+  
+  try {
+    // 해당 public_store 정보 가져오기 (더 많은 데이터에서 찾기)
+    const stores = await getPublicStores({ limit: 1000 });
+    const publicStore = stores.find(s => s.id === storeId);
     
-    // 메뉴판 이미지 업데이트 (새 이미지가 있을 때만)
-    if (menuBoardImageUrl) {
-      restaurant.menu_board_image_url = menuBoardImageUrl;
+    if (!publicStore) {
+      throw new Error('해당 가게를 찾을 수 없습니다.');
     }
-    
-    // 가격대 업데이트
-    const prices = restaurant.menu_items.map(m => m.price);
-    const minPrice = Math.min(...prices);
-    const maxPrice = Math.max(...prices);
-    restaurant.price_range = `${minPrice.toLocaleString()}-${maxPrice.toLocaleString()}원`;
-  } else {
-    // 새 음식점 생성
-    const prices = newMenuItems.map(m => m.price);
-    const minPrice = Math.min(...prices);
-    const maxPrice = Math.max(...prices);
-    
-    restaurant = {
-      id: `restaurant_${Date.now()}`,
-      public_store_id: storeId,
-      rating: null, // 평점 없음으로 초기화
-      price_range: `${minPrice.toLocaleString()}-${maxPrice.toLocaleString()}원`,
-      menu_items: newMenuItems,
-      reviews: [],
-      menu_board_image_url: menuBoardImageUrl,
-      created_at: new Date().toISOString()
-    };
-    stored.push(restaurant);
-  }
 
-  saveStoredRestaurants(stored);
+    // 음식점 정보 생성
+    const restaurantData = {
+      public_store_id: storeId,
+      name: publicStore.store_name,
+      category: publicStore.mapped_category || '기타',
+      address: publicStore.road_address,
+      rating: undefined,
+      price_range: '보통', // 기본값
+    };
+
+    let restaurantId: number;
+    try {
+      const restaurant = await createRestaurant(restaurantData);
+      restaurantId = restaurant.id;
+      console.log('✅ 음식점 정보 생성:', restaurant.name);
+    } catch (error: any) {
+      // 이미 존재하는 경우 에러 처리
+      if (error.message?.includes('duplicate') || error.code === '23505') {
+        console.log('음식점이 이미 존재합니다. 메뉴만 추가합니다.');
+        // 기존 restaurant_id를 찾아야 함 - 임시로 에러 발생
+        throw new Error('음식점이 이미 존재합니다. 기존 restaurant_id 조회 로직이 필요합니다.');
+      }
+      throw error;
+    }
+
+    // 메뉴 아이템들 저장
+    for (const menuItem of menuItems) {
+      await createMenuItem({
+        restaurant_id: restaurantId,
+        name: menuItem.name,
+        price: menuItem.price,
+        description: menuItem.description || '',
+        is_popular: menuItem.is_popular,
+      });
+    }
+
+    console.log(`✅ ${menuItems.length}개 메뉴 저장 완료`);
+    return restaurantId;
+  } catch (error) {
+    console.error('❌ 메뉴 저장 실패:', error);
+    throw error;
+  }
 }
 
 // 특정 상가의 메뉴 불러오기
@@ -144,4 +130,15 @@ export function fixRatingData(): void {
   }));
   
   saveStoredRestaurants(updated);
+}
+
+export interface MenuItem {
+  id: string; // 로컬에서는 uuid 사용
+  store_id: number;
+  name: string;
+  price: number;
+  description: string;
+  is_popular: boolean;
+  image?: File;
+  image_url?: string;
 } 

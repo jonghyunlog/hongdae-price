@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,41 +8,80 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, X, Camera } from "lucide-react";
-
-interface MenuItem {
-  name: string;
-  price: number | '';
-  description: string;
-  is_popular: boolean;
-  image?: File;
-}
+import { Switch } from '@/components/ui/switch';
+import type { MenuItem } from '@/lib/localStorage';
+import { getRestaurants } from '@/lib/database';
 
 interface MenuRegistrationModalProps {
   storeName: string;
   storeId: number;
-  existingMenus?: MenuItem[];
-  onSubmit: (menus: MenuItem[], menuBoardImage?: File) => Promise<void>;
-  trigger: React.ReactNode;
+  existingMenus?: Omit<MenuItem, 'id' | 'store_id'>[];
+  existingMenuBoardImageUrl?: string;
+  onSubmit: (menus: Omit<MenuItem, 'id' | 'store_id'>[], menuBoardImage?: File) => Promise<void>;
+  trigger?: React.ReactNode;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
 export default function MenuRegistrationModal({
   storeName,
-  // storeId,
+  storeId,
   existingMenus = [],
+  existingMenuBoardImageUrl,
   onSubmit,
-  trigger
+  trigger,
+  isOpen: controlledIsOpen = false,
+  onClose,
 }: MenuRegistrationModalProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [menuBoardImage, setMenuBoardImage] = useState<File | null>(null);
-  const [menus, setMenus] = useState<MenuItem[]>(
-    existingMenus.length > 0 
-      ? existingMenus 
-      : [{ name: '', price: '', description: '', is_popular: false }]
-  );
+  const [menus, setMenus] = useState<Omit<MenuItem, 'id' | 'store_id'>[]>([]);
+
+  useEffect(() => {
+    setOpen(controlledIsOpen);
+  }, [controlledIsOpen]);
+
+  // 기존 메뉴 로드
+  useEffect(() => {
+    if (open && storeId) {
+      loadExistingMenus();
+    }
+  }, [open, storeId]);
+
+  const loadExistingMenus = async () => {
+    try {
+      // 모든 restaurants를 가져와서 public_store_id로 필터링
+      const allRestaurants = await getRestaurants({ limit: 1000 });
+      const matchingRestaurants = allRestaurants.filter((r: any) => r.public_store_id === storeId);
+      
+      if (matchingRestaurants.length > 0 && matchingRestaurants[0].menu_items) {
+        const existingMenuItems = matchingRestaurants[0].menu_items.map((item: any) => ({
+          name: item.name,
+          price: item.price,
+          description: item.description || '',
+          is_popular: item.is_popular || false,
+        }));
+        setMenus(existingMenuItems.length > 0 ? existingMenuItems : [{ name: '', price: 0, description: '', is_popular: false }]);
+      } else {
+        // 기존 메뉴가 없으면 빈 폼 하나 추가
+        setMenus([{ name: '', price: 0, description: '', is_popular: false }]);
+      }
+    } catch (error) {
+      console.error('기존 메뉴 로드 실패:', error);
+      setMenus([{ name: '', price: 0, description: '', is_popular: false }]);
+    }
+  };
+
+  const handleOpenChange = (newOpen: boolean) => {
+    if (!newOpen && onClose) {
+      onClose();
+    }
+    setOpen(newOpen);
+  };
 
   const addMenu = () => {
-    setMenus([...menus, { name: '', price: '', description: '', is_popular: false }]);
+    setMenus([...menus, { name: '', price: 0, description: '', is_popular: false }]);
   };
 
   const removeMenu = (index: number) => {
@@ -61,7 +100,7 @@ export default function MenuRegistrationModal({
     e.preventDefault();
     
     // 유효성 검사
-    const validMenus = menus.filter(menu => menu.name && menu.price);
+    const validMenus = menus.filter(menu => menu.name && menu.price > 0);
     
     // 메뉴판 사진이 있으면 메뉴 정보는 선택사항
     if (validMenus.length === 0 && !menuBoardImage) {
@@ -74,7 +113,7 @@ export default function MenuRegistrationModal({
       await onSubmit(validMenus, menuBoardImage || undefined);
       setOpen(false);
       // 성공 후 폼 리셋
-      setMenus([{ name: '', price: '', description: '', is_popular: false }]);
+      setMenus([{ name: '', price: 0, description: '', is_popular: false }]);
       setMenuBoardImage(null);
     } catch (error) {
       console.error('메뉴 등록 실패:', error);
@@ -85,11 +124,8 @@ export default function MenuRegistrationModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {trigger}
-      </DialogTrigger>
-      
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">메뉴 & 가격 등록</DialogTitle>

@@ -1,9 +1,16 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+// .env.local 파일에서 환경 변수를 가져옵니다.
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// 타입스크립트를 위해 환경 변수가 없을 경우 에러를 발생시킵니다.
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Supabase URL and Anon Key must be defined in .env.local')
+}
+
+// Supabase 클라이언트를 생성하고 내보냅니다.
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 // 타입 정의
 export interface Restaurant {

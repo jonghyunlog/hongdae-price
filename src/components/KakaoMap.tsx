@@ -8,160 +8,130 @@ declare global {
   }
 }
 
+export interface MapMarker {
+  lat: number;
+  lng: number;
+  label: string;
+  category?: string;
+}
+
 interface KakaoMapProps {
-  width?: string;
-  height?: string;
+  markers: MapMarker[];
+  onMarkerClick?: (markerData: MapMarker) => void;
   latitude: number;
   longitude: number;
-  markers?: Array<{
-    lat: number;
-    lng: number;
-    title: string;
-    content?: string;
-  }>;
-  onMarkerClick?: (marker: any) => void;
   zoom?: number;
+  width?: string;
+  height?: string;
 }
 
 export default function KakaoMap({
-  width = '100%',
-  height = '400px',
+  markers,
+  onMarkerClick,
   latitude,
   longitude,
-  markers = [],
-  onMarkerClick,
-  zoom = 3
+  zoom = 5,
+  width = '100%',
+  height = '100%',
 }: KakaoMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const mapRef = useRef<any>(null);
+  const clustererRef = useRef<any>(null);
 
   useEffect(() => {
-    const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
-    if (!apiKey || apiKey === 'your_kakao_map_api_key_here' || apiKey === '여기에_발급받은_API_키를_입력해주세요') {
-      setError('카카오 지도 API 키가 설정되지 않았습니다.');
-      setIsLoading(false);
-      return;
-    }
-
     let isMounted = true;
-    let timeoutId: NodeJS.Timeout | null = null;
-    let retryCount = 0;
-    const maxRetries = 20;
+    
+    const initializeMap = () => {
+      if (!isMounted || !mapContainer.current) return;
 
-    function initializeMap() {
-      if (!isMounted || retryCount >= maxRetries) {
-        if (retryCount >= maxRetries) {
-          setError('지도 로드 시간이 초과되었습니다.');
-        }
-        setIsLoading(false);
-        return;
-      }
-      
-      retryCount++;
-      
-      if (window.kakao && window.kakao.maps) {
+      // 카카오 API 확인
+      if (typeof window !== 'undefined' && window.kakao && window.kakao.maps) {
         window.kakao.maps.load(() => {
-          if (!isMounted) return;
-          
-          if (!mapContainer.current) {
-            timeoutId = setTimeout(initializeMap, 50);
-            return;
-          }
+          if (!isMounted || !mapContainer.current) return;
           
           try {
+            // 기존 지도 정리
+            if (clustererRef.current) {
+              clustererRef.current.clear();
+            }
+            
             const options = {
               center: new window.kakao.maps.LatLng(latitude, longitude),
               level: zoom,
             };
-
+            
             const map = new window.kakao.maps.Map(mapContainer.current, options);
             mapRef.current = map;
+            
+            // 클러스터러 생성
+            const clusterer = new window.kakao.maps.MarkerClusterer({
+              map: map,
+              averageCenter: true,
+              minLevel: 6
+            });
+            clustererRef.current = clusterer;
 
-            // 마커들 추가
-            markers.forEach((markerData) => {
-              const markerPosition = new window.kakao.maps.LatLng(markerData.lat, markerData.lng);
-              
-              // 커스텀 마커 이미지 생성
-              const svgString = `
-                  <svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="20" cy="20" r="18" fill="#ff6b35" stroke="#fff" stroke-width="2"/>
-                    <text x="20" y="25" text-anchor="middle" fill="white" font-size="12" font-weight="bold">🍽️</text>
-                  </svg>
-                `;
-              const encodedSvg = btoa(unescape(encodeURIComponent(svgString)));
-
-              const markerImage = new window.kakao.maps.MarkerImage(
-                'data:image/svg+xml;base64,' + encodedSvg,
-                new window.kakao.maps.Size(40, 40)
-              );
-              
-              const marker = new window.kakao.maps.Marker({
-                position: markerPosition,
-                title: markerData.title,
-                image: markerImage,
+            // 마커 생성
+            if (markers.length > 0) {
+              const mapMarkers = markers.map((markerData) => {
+                const position = new window.kakao.maps.LatLng(markerData.lat, markerData.lng);
+                const marker = new window.kakao.maps.Marker({
+                  position: position,
+                  title: markerData.label
+                });
+                
+                if (onMarkerClick) {
+                  window.kakao.maps.event.addListener(marker, 'click', () => {
+                    onMarkerClick(markerData);
+                  });
+                }
+                
+                return marker;
               });
 
-              marker.setMap(map);
-
-              // 인포윈도우 생성
-              if (markerData.content) {
-                const infowindow = new window.kakao.maps.InfoWindow({
-                  content: markerData.content,
-                  removable: true,
-                  zIndex: 1
-                });
-
-                // 마커 클릭 이벤트
-                window.kakao.maps.event.addListener(marker, 'click', () => {
-                  infowindow.open(map, marker);
-                  if (onMarkerClick) {
-                    onMarkerClick(markerData);
-                  }
-                });
-              }
-            });
-
+              clusterer.addMarkers(mapMarkers);
+            }
+            
             setIsLoading(false);
+            setError(null);
           } catch (err) {
             console.error("카카오맵 초기화 오류:", err);
-            setError('지도를 로드하는 중 오류가 발생했습니다.');
+            setError('지도를 초기화하는 중 오류가 발생했습니다.');
             setIsLoading(false);
           }
         });
       } else {
-        timeoutId = setTimeout(initializeMap, 100);
+        // API가 아직 완전히 로드되지 않았으면 잠시 후 재시도
+        setTimeout(initializeMap, 100);
       }
-    }
+    };
 
-    initializeMap();
+    // 초기화 시작
+    const timeoutId = setTimeout(initializeMap, 100); // 약간의 지연 후 시작
 
     return () => {
       isMounted = false;
-      if (timeoutId) clearTimeout(timeoutId);
+      clearTimeout(timeoutId);
+      if (clustererRef.current) {
+        clustererRef.current.clear();
+      }
     };
-  }, [latitude, longitude, markers, zoom, onMarkerClick]);
+  }, [latitude, longitude, zoom, markers, onMarkerClick]);
 
   if (error) {
-    const isApiKeyMissingError = error === '카카오 지도 API 키가 설정되지 않았습니다.';
     return (
-      <div
-        style={{ width, height }}
-        className="rounded-lg border bg-gray-100 flex items-center justify-center"
-      >
-        <div className="text-center">
-          <div className="text-gray-500 mb-2">⚠️</div>
-          <p className="text-sm text-gray-600 mb-2">{error}</p>
-          {isApiKeyMissingError ? (
-            <p className="text-xs text-gray-400">
-              .env.local 파일에 NEXT_PUBLIC_KAKAO_MAP_API_KEY를 설정해주세요
-            </p>
-          ) : (
-            <p className="text-xs text-gray-400">
-              API 키가 유효한지, 카카오 개발자 콘솔의 도메인 설정을 확인해주세요.
-            </p>
-          )}
+      <div style={{ width, height }} className="rounded-lg border bg-gray-100 flex items-center justify-center">
+        <div className="text-center p-4">
+          <p className="font-semibold text-red-500">지도 로딩 오류</p>
+          <p className="text-sm text-gray-600 mt-2">{error}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="mt-2 px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600"
+          >
+            새로고침
+          </button>
         </div>
       </div>
     );
@@ -169,16 +139,12 @@ export default function KakaoMap({
 
   return (
     <div style={{ width, height }} className="relative">
-      <div
-        ref={mapContainer}
-        style={{ width: '100%', height: '100%' }}
-        className="rounded-lg border"
-      />
+      <div ref={mapContainer} className="w-full h-full rounded-lg" />
       {isLoading && (
-        <div className="absolute inset-0 bg-gray-100 rounded-lg flex items-center justify-center">
+        <div className="absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center rounded-lg">
           <div className="text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto mb-2"></div>
-            <p className="text-sm text-gray-600">지도를 불러오는 중...</p>
+            <p className="text-sm text-gray-600">지도 초기화 중...</p>
           </div>
         </div>
       )}

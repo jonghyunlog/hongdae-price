@@ -1,54 +1,79 @@
 import { supabase } from './supabase';
 import type { Restaurant, MenuItem, Review } from './supabase';
 
-// 공공데이터 상가 정보 조회
-export async function getPublicStores(options?: {
-  category?: string;
+export interface PublicStore {
+  id: number;
+  store_name: string;
+  branch_name: string | null;
+  business_large_category: string;
+  business_medium_category: string;
+  business_small_category: string;
+  sido_name: string;
+  sigungu_name: string;
+  admin_dong_name: string;
+  legal_dong_name: string;
+  jibun_address: string;
+  road_address: string;
+  longitude: number;
+  latitude: number;
+  postal_code: string;
+  mapped_category: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// 공공데이터 상가 정보 조회 (음식점만)
+export async function getPublicStores(options: {
   search?: string;
+  category?: string;
   sortBy?: 'name' | 'category';
   limit?: number;
-}) {
+  offset?: number;
+} = {}): Promise<PublicStore[]> {
   let query = supabase
     .from('public_stores')
-    .select(`
-      *,
-      restaurants(
-        id, rating, price_range,
-        menu_items(id, name, price, is_popular),
-        reviews(id, rating)
-      )
-    `);
+    .select('*')
+    .eq('business_large_category', '음식'); // 음식 업종만 필터링
 
-  // 카테고리 필터
-  if (options?.category && options.category !== 'all') {
+  // 검색어가 있으면 검색 (주소도 포함)
+  if (options.search) {
+    query = query.or(`store_name.ilike.%${options.search}%,road_address.ilike.%${options.search}%`);
+  }
+
+  if (options.category && options.category !== 'all') {
     query = query.eq('mapped_category', options.category);
   }
 
-  // 검색 필터
-  if (options?.search) {
-    query = query.ilike('store_name', `%${options.search}%`);
-  }
-
-  // 정렬
-  if (options?.sortBy === 'name') {
-    query = query.order('store_name');
+  if (options.sortBy === 'name') {
+    query = query.order('store_name', { ascending: true });
+  } else if (options.sortBy === 'category') {
+    query = query.order('mapped_category', { ascending: true });
   } else {
-    query = query.order('mapped_category').order('store_name');
+    // 기본 정렬: 검색어가 있으면 관련도순, 없으면 인기순(랜덤)
+    if (options.search) {
+      query = query.order('store_name', { ascending: true });
+    } else {
+      // 인기 맛집 우선순위: 홍대 핫플레이스 키워드 포함된 곳들 우선
+      // 그 다음 카테고리별로 고르게 분산
+      query = query.order('store_name', { ascending: true });
+    }
   }
 
-  // 제한
-  if (options?.limit) {
-    query = query.limit(options.limit);
+  // limit과 offset 적용
+  if (options.offset) {
+    query = query.range(options.offset, options.offset + (options.limit || 100) - 1);
+  } else {
+    query = query.limit(options.limit || 100);
   }
 
   const { data, error } = await query;
 
   if (error) {
     console.error('Error fetching public stores:', error);
-    return [];
+    throw new Error('가게 정보를 불러오는 데 실패했습니다.');
   }
 
-  return data || [];
+  return data as PublicStore[];
 }
 
 // 음식점 관련 함수들 (사용자 데이터)
