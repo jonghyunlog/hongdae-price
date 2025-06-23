@@ -17,6 +17,7 @@ export default function MapPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [category, setCategory] = useState("all");
   const [selectedStore, setSelectedStore] = useState<MockStore | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // 환경변수 값 콘솔 출력 (진단용)
   // console.log('KAKAO KEY:', process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY);
@@ -82,8 +83,11 @@ export default function MapPage() {
     );
     if (store) {
       setSelectedStore(store);
+      if (!isSidebarOpen) {
+        setIsSidebarOpen(true);
+      }
     }
-  }, [filteredStores]);
+  }, [filteredStores, isSidebarOpen]);
 
   // 홍대 중심 좌표
   const hongdaeCenter = { lat: 37.5563, lng: 126.9236 };
@@ -105,10 +109,19 @@ export default function MapPage() {
               <h1 className="text-xl font-bold text-gray-900">홍대 맛집지도</h1>
             </Link>
             <div className="flex items-center gap-2">
-              <Link href="/restaurants">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="md:hidden"
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              >
+                <List className="h-4 w-4 mr-1" />
+                목록
+              </Button>
+              <Link href="/restaurants" className="hidden md:flex">
                 <Button variant="outline" size="sm">
                   <List className="h-4 w-4 mr-1" />
-                  목록보기
+                  전체 목록보기
                 </Button>
               </Link>
               <Button variant="outline" size="sm">로그인</Button>
@@ -116,9 +129,14 @@ export default function MapPage() {
           </div>
         </header>
 
-        <div className="flex h-[calc(100vh-73px)]">
+        <div className="flex h-[calc(100vh-73px)] relative">
           {/* 좌측 검색 패널 */}
-          <div className="w-80 bg-white border-r flex flex-col">
+          <div className={`
+            absolute top-0 left-0 h-full w-80 bg-white border-r flex flex-col z-20 
+            transition-transform duration-300 ease-in-out
+            ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+            md:relative md:translate-x-0 md:flex
+          `}>
             {/* 검색 영역 */}
             <div className="p-4 border-b">
               <div className="space-y-3">
