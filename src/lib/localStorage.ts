@@ -25,17 +25,21 @@ interface StoredRestaurant {
 const STORAGE_KEY = 'hongdae-restaurants';
 
 // 저장된 음식점 데이터 불러오기
-export function getStoredRestaurants(): StoredRestaurant[] {
+export const getStoredRestaurants = (): StoredRestaurant[] => {
   if (typeof window === 'undefined') return [];
   
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+    if (!stored) return [];
+    
+    const data = JSON.parse(stored);
+    // blob URL 필터링 제거 - 새로 등록한 이미지도 보이도록 함
+    return data;
   } catch (error) {
-    console.error('Error loading stored restaurants:', error);
+    console.error('Failed to load stored restaurants:', error);
     return [];
   }
-}
+};
 
 // 음식점 데이터 저장하기
 export function saveStoredRestaurants(restaurants: StoredRestaurant[]): void {
